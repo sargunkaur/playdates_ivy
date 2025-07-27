@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Dialog } from './components/ui/dialog';
 import BookingPage from './BookingPage';
+import ConfirmationScreen from './ConfirmationScreen';
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL!,
@@ -14,9 +15,27 @@ export default function PlaydateSelector() {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', date: '', reason: '' });
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [isMobile, setIsMobile] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [confirmationData, setConfirmationData] = useState<{ activity: any; userName: string } | null>(null);
+  const [phoneError, setPhoneError] = useState<string>('');
 
   // Shared form field styles
   const formFieldClasses = "border-2 border-[#cbd5d8] p-2 sm:p-2.5 md:p-3 rounded-[12px] bg-transparent text-[#3d342e] placeholder-[#594f43] focus:outline-none focus:border-[#594f43] transition-colors text-xs sm:text-sm md:text-base w-full";
+
+  // Phone number validation function
+  const validatePhoneNumber = (phone: string): boolean => {
+    // Remove all non-digit characters
+    const cleaned = phone.replace(/\D/g, '');
+    
+    // Check if it's a valid US phone number (10 or 11 digits)
+    if (cleaned.length === 10) {
+      return true; // 10-digit number
+    } else if (cleaned.length === 11 && cleaned.startsWith('1')) {
+      return true; // 11-digit number starting with 1
+    }
+    
+    return false;
+  };
 
   useEffect(() => {
     fetchActivities();
@@ -82,9 +101,21 @@ async function fetchActivities() {
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Clear previous phone error
+    setPhoneError('');
+    
+    // Validate required fields
     if (!formData.name || !formData.email || !formData.phone || !formData.date) {
       return;
     }
+    
+    // Validate phone number
+    if (!validatePhoneNumber(formData.phone)) {
+      setPhoneError('Please enter a valid 10-digit phone number');
+      return;
+    }
+    
     if (selectedActivity) {
       await supabase.from('bookings').insert({
         activity_id: selectedActivity.id,
@@ -97,6 +128,10 @@ async function fetchActivities() {
         reason: formData.reason
       });
       await supabase.from('activities').update({ is_booked: true }).eq('id', selectedActivity.id);
+      
+      // Show confirmation screen
+      setConfirmationData({ activity: selectedActivity, userName: formData.name });
+      setShowConfirmation(true);
       setSelectedActivity(null);
       setFormData({ name: '', email: '', phone: '', date: '', reason: '' });
     }
@@ -127,6 +162,20 @@ async function fetchActivities() {
           setSelectedActivity(null);
           setFormData({ name: '', email: '', phone: '', date: '', reason: '' });
         }} 
+      />
+    );
+  }
+
+  // Show confirmation screen on mobile
+  if (isMobile && showConfirmation && confirmationData) {
+    return (
+      <ConfirmationScreen
+        activity={confirmationData.activity}
+        userName={confirmationData.userName}
+        onClose={() => {
+          setShowConfirmation(false);
+          setConfirmationData(null);
+        }}
       />
     );
   }
@@ -225,13 +274,23 @@ async function fetchActivities() {
                 className={formFieldClasses}
                 required
               />
-              <input
-                type="tel"
-                placeholder="Phone Number"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className={formFieldClasses}
-              />
+              <div>
+                <input
+                  type="tel"
+                  placeholder="Phone Number"
+                  value={formData.phone}
+                  onChange={(e) => {
+                    setFormData({ ...formData, phone: e.target.value });
+                    if (phoneError) setPhoneError(''); // Clear error when user types
+                  }}
+                  className={`${formFieldClasses} ${phoneError ? 'border-red-500 focus:border-red-500' : ''}`}
+                />
+                {phoneError && (
+                  <p className="text-red-500 text-xs mt-1 ml-1">
+                    {phoneError}
+                  </p>
+                )}
+              </div>
               <div>
                 <label className="block text-sm font-semibold text-[#3d342e] mb-2">
                   When do you want to play?
@@ -259,6 +318,76 @@ async function fetchActivities() {
                 Let's go play!
               </button>
             </form>
+          </div>
+        </Dialog>
+      )}
+
+      {/* Confirmation Modal - Desktop Only */}
+      {showConfirmation && confirmationData && !isMobile && (
+        <Dialog open={true} onOpenChange={() => {
+          setShowConfirmation(false);
+          setConfirmationData(null);
+        }}>
+          <div className="w-full max-w-md mx-auto bg-[#f1ecdd] rounded-[20px] shadow-xl border-2 border-[#cbd5d8] m-2 sm:m-4 relative">
+            <button
+              onClick={() => {
+                setShowConfirmation(false);
+                setConfirmationData(null);
+              }}
+              className="absolute top-4 right-4 text-[#594f43] hover:text-[#3d342e] text-2xl font-bold z-10 bg-[#f1ecdd] rounded-full w-8 h-8 flex items-center justify-center hover:bg-[#e8e0d0] transition-colors"
+            >
+              ×
+            </button>
+            <div className="p-6 text-center">
+              {/* Title */}
+              <h2 className="text-2xl font-bold text-green-600 mb-4">
+                Play Date Booked! 🎉
+              </h2>
+
+              {/* Activity Confirmation Box */}
+              <div className="bg-[#cbd5d8] rounded-[12px] p-4 mb-6">
+                <h3 className="font-bold text-lg mb-2">
+                  🎉 {confirmationData.activity.title}
+                </h3>
+                <p className="text-sm text-[#594f43]">
+                  Your playdate is confirmed!
+                </p>
+              </div>
+
+              {/* Confirmation Details */}
+              <div className="space-y-3 mb-6 text-left">
+                <div className="flex items-center gap-3">
+                  <span className="text-green-600 text-lg">✓</span>
+                  <span className="text-sm">Calendar invite sent to your email</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[#594f43] text-lg">📱</span>
+                  <span className="text-sm">Text conversation started</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[#594f43] text-lg">💾</span>
+                  <span className="text-sm">Your booking has been saved</span>
+                </div>
+              </div>
+
+              {/* Personalized Message Box */}
+              <div className="bg-[#f1ecdd] border-2 border-[#cbd5d8] rounded-[12px] p-4 mb-6">
+                <p className="font-bold text-[#3d342e]">
+                  Hey {confirmationData.userName}! I'll text you soon to plan out all the fun details. Can't wait! ✨
+                </p>
+              </div>
+
+              {/* Action Button */}
+              <button
+                onClick={() => {
+                  setShowConfirmation(false);
+                  setConfirmationData(null);
+                }}
+                className="w-full bg-gradient-to-r from-green-500 to-blue-500 text-white py-3 rounded-[12px] font-bold hover:from-green-600 hover:to-blue-600 transition-all"
+              >
+                Awesome! ✨
+              </button>
+            </div>
           </div>
         </Dialog>
       )}
