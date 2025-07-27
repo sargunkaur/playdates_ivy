@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Dialog } from './components/ui/dialog';
-import { Calendar } from './components/ui/calendar';
+import BookingPage from './BookingPage';
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL!,
@@ -12,8 +12,11 @@ export default function PlaydateSelector() {
   const [activities, setActivities] = useState<any[]>([]);
   const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', date: '', reason: '' });
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Shared form field styles
+  const formFieldClasses = "border-2 border-[#cbd5d8] p-2 sm:p-2.5 md:p-3 rounded-[12px] bg-transparent text-[#3d342e] placeholder-[#594f43] focus:outline-none focus:border-[#594f43] transition-colors text-xs sm:text-sm md:text-base w-full";
 
   useEffect(() => {
     fetchActivities();
@@ -31,6 +34,20 @@ export default function PlaydateSelector() {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+
 
 async function fetchActivities() {
   const { data: activitiesData, error: activitiesError } = await supabase
@@ -65,10 +82,9 @@ async function fetchActivities() {
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.email || !formData.phone) {
+    if (!formData.name || !formData.email || !formData.phone || !formData.date) {
       return;
     }
-    // const formattedDate = selectedDate?.toDateString() || '';
     if (selectedActivity) {
       await supabase.from('bookings').insert({
         activity_id: selectedActivity.id,
@@ -77,7 +93,7 @@ async function fetchActivities() {
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
-        // date_range: formattedDate,
+        date: formData.date,
         reason: formData.reason
       });
       await supabase.from('activities').update({ is_booked: true }).eq('id', selectedActivity.id);
@@ -102,36 +118,50 @@ async function fetchActivities() {
         activity.tags && activity.tags.includes(selectedFilter)
       );
 
+    // Show booking page on mobile, modal on desktop
+  if (isMobile && selectedActivity) {
+    return (
+      <BookingPage 
+        activity={selectedActivity} 
+        onClose={() => {
+          setSelectedActivity(null);
+          setFormData({ name: '', email: '', phone: '', date: '', reason: '' });
+        }} 
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#594f43] font-sans text-[#3d342e]">
       <div className="px-6 py-12 max-w-6xl mx-auto">
         {/* Filter Buttons */}
         <div className="mb-8">
-          {/* <h2 className="text-2xl font-bold text-white mb-4 text-center">Filter by Category</h2> */}
-          <div className="flex flex-wrap justify-center gap-3">
-            <button
-              onClick={() => setSelectedFilter('all')}
-              className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
-                selectedFilter === 'all'
-                  ? 'bg-white text-[#594f43]'
-                  : 'bg-[#3d342e] text-white hover:bg-[#4a4038]'
-              }`}
-            >
-              All Activities
-            </button>
-            {allTags.map((tag) => (
+          <div className="bg-[#f1ecdd] rounded-lg p-1 w-full">
+            <div className="flex flex-wrap gap-1">
               <button
-                key={tag}
-                onClick={() => setSelectedFilter(tag)}
-                className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
-                  selectedFilter === tag
-                    ? 'bg-white text-[#594f43]'
-                    : 'bg-[#3d342e] text-white hover:bg-[#4a4038]'
+                onClick={() => setSelectedFilter('all')}
+                className={`px-6 py-3 rounded-md font-bold text-sm transition-all flex-shrink-0 ${
+                  selectedFilter === 'all'
+                    ? 'bg-[#594f43] text-white shadow-sm'
+                    : 'text-[#594f43] hover:bg-[#e8e0d0]'
                 }`}
               >
-                {tag}
+                ALL
               </button>
-            ))}
+              {allTags.map((tag, index) => (
+                <button
+                  key={tag}
+                  onClick={() => setSelectedFilter(tag)}
+                  className={`px-6 py-3 rounded-md font-bold text-sm transition-all flex-shrink-0 ${
+                    selectedFilter === tag
+                      ? 'bg-[#594f43] text-white shadow-sm'
+                      : 'text-[#594f43] hover:bg-[#e8e0d0]'
+                  }`}
+                >
+                  {tag.toUpperCase()}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -162,23 +192,29 @@ async function fetchActivities() {
         </div>
       </div>
 
-      {/* Booking Form Modal */}
-      {selectedActivity && (
+      {/* Booking Form Modal - Desktop Only */}
+      {selectedActivity && !isMobile && (
         <Dialog open={true} onOpenChange={() => setSelectedActivity(null)}>
-          <div className="p-6 w-full max-w-md mx-auto bg-white rounded-lg shadow-lg">
-            <h3 className="text-2xl font-extrabold text-center mb-4 text-[#3d342e]">
-              🎉 {selectedActivity.title.toLowerCase()} 🎉
+          <div className="w-full max-w-md mx-auto bg-[#f1ecdd] rounded-[20px] shadow-xl border-2 border-[#cbd5d8] m-2 sm:m-4 relative">
+            <button
+              onClick={() => {
+                setSelectedActivity(null);
+                setFormData({ name: '', email: '', phone: '', date: '', reason: '' });
+              }}
+              className="absolute top-4 right-4 text-[#594f43] hover:text-[#3d342e] text-2xl font-bold z-10 bg-[#f1ecdd] rounded-full w-8 h-8 flex items-center justify-center hover:bg-[#e8e0d0] transition-colors"
+            >
+              ×
+            </button>
+            <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-center mb-2 sm:mb-0 text-[#3d342e] p-2 sm:p-4 md:p-8 pb-0">
+              Let's {selectedActivity.title.toLowerCase()} together!
             </h3>
-            <p className="text-center text-[#3d342e] mb-4">
-              Let's have an amazing time together with this activity!
-            </p>
-            <form onSubmit={handleFormSubmit} className="flex flex-col gap-4">
+            <form onSubmit={handleFormSubmit} className="flex flex-col gap-3 sm:gap-4 p-2 sm:p-4 md:p-8 pt-0">
               <input
                 type="text"
                 placeholder="Name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="border p-3 rounded-md"
+                className={formFieldClasses}
                 required
               />
               <input
@@ -186,7 +222,7 @@ async function fetchActivities() {
                 placeholder="Email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="border p-3 rounded-md"
+                className={formFieldClasses}
                 required
               />
               <input
@@ -194,25 +230,33 @@ async function fetchActivities() {
                 placeholder="Phone Number"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="border p-3 rounded-md"
+                className={formFieldClasses}
               />
-              {/* <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Select a Date
+              <div>
+                <label className="block text-sm font-semibold text-[#3d342e] mb-2">
+                  When do you want to play?
                 </label>
-                <Calendar mode="single" selected={selectedDate} onSelect={setSelectedDate} />
-              </div> */}
+                <input
+                  type="text"
+                  placeholder="Share a date between now and Dec 31, 2025"
+                  value={formData.date}
+                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                  className={formFieldClasses}
+                  required
+                />
+              </div>
               <textarea
                 placeholder="Why did you pick this playdate? What are you most looking forward to on it?"
                 value={formData.reason}
                 onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                className="border p-3 rounded-md"
+                className={`${formFieldClasses} resize-none`}
+                rows={4}
               />
               <button
                 type="submit"
-                className="bg-gradient-to-r from-purple-400 to-pink-500 text-white py-3 rounded-md font-bold mt-2"
+                className="bg-[#594f43] text-white py-2 sm:py-2.5 md:py-3 rounded-[12px] font-bold mt-4 hover:bg-[#4a4038] transition-colors text-xs sm:text-sm md:text-base"
               >
-                Let's Do This! 🎉
+                Let's go play!
               </button>
             </form>
           </div>
