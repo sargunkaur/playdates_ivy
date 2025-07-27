@@ -106,7 +106,7 @@ async function fetchActivities() {
     setPhoneError('');
     
     // Validate required fields
-    if (!formData.name || !formData.email || !formData.phone || !formData.date) {
+    if (!formData.name || !formData.email || !formData.phone) {
       return;
     }
     
@@ -117,23 +117,95 @@ async function fetchActivities() {
     }
     
     if (selectedActivity) {
-      await supabase.from('bookings').insert({
-        activity_id: selectedActivity.id,
-        title: selectedActivity.title,
-        description: selectedActivity.description || '',
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        date: formData.date,
-        reason: formData.reason
-      });
-      await supabase.from('activities').update({ is_booked: true }).eq('id', selectedActivity.id);
-      
-      // Show confirmation screen
-      setConfirmationData({ activity: selectedActivity, userName: formData.name });
-      setShowConfirmation(true);
-      setSelectedActivity(null);
-      setFormData({ name: '', email: '', phone: '', date: '', reason: '' });
+      try {
+        // Insert booking with correct schema
+        const { data: bookingData, error: bookingError } = await supabase.from('bookings').insert({
+          activity_id: selectedActivity.id,
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          preferred_date_start: formData.date || null, // Save as text
+          preferred_date_end: formData.date || null, // Save as text
+          notes: formData.reason || ''
+        });
+
+        if (bookingError) {
+          console.error('Failed to save booking:', bookingError);
+          console.error('Booking data attempted:', {
+            activity_id: selectedActivity.id,
+            name: formData.name,
+            email: formData.email,
+            phone: formData.phone,
+            preferred_date_start: formData.date || null,
+            preferred_date_end: formData.date || null,
+            notes: formData.reason || ''
+          });
+          throw new Error(`Booking save failed: ${bookingError.message}`);
+        }
+
+        // Update activity status
+        const { error: activityError } = await supabase.from('activities').update({ is_booked: true }).eq('id', selectedActivity.id);
+        
+        if (activityError) {
+          console.error('Failed to update activity status:', activityError);
+          throw new Error(`Activity update failed: ${activityError.message}`);
+        }
+
+        // Send email confirmation
+        try {
+          await sendEmailConfirmation(formData.email, selectedActivity.title, formData.date, formData.name);
+        } catch (error) {
+          console.error('Failed to send email confirmation:', error);
+        }
+        
+        // Show confirmation screen
+        setConfirmationData({ activity: selectedActivity, userName: formData.name });
+        setShowConfirmation(true);
+        setSelectedActivity(null);
+        setFormData({ name: '', email: '', phone: '', date: '', reason: '' });
+        
+      } catch (error) {
+        console.error('Booking process failed:', error);
+        // You could show an error message to the user here
+        alert('Failed to save booking. Please try again.');
+      }
+    }
+  };
+
+  // Email confirmation function
+  const sendEmailConfirmation = async (email: string, activityName: string, activityDate: string, userName: string) => {
+    const emailData = {
+      to: email,
+      subject: 'Playdate Confirmation',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #594f43; text-align: center;">🎉 Playdate Confirmed! 🎉</h2>
+          <div style="background-color: #f1ecdd; padding: 20px; border-radius: 12px; margin: 20px 0;">
+            <h3 style="color: #3d342e; margin-bottom: 10px;">You've booked "${activityName}" with Sargun</h3>
+            <p style="color: #594f43; margin: 5px 0;"><strong>Date:</strong> ${activityDate}</p>
+            <p style="color: #594f43; margin: 5px 0;"><strong>Name:</strong> ${userName}</p>
+          </div>
+          <p style="color: #3d342e; text-align: center; font-size: 16px;">
+            We're excited to have fun together! Sargun will text you soon to plan out all the details. ✨
+          </p>
+          <div style="text-align: center; margin-top: 30px;">
+            <p style="color: #594f43; font-size: 14px;">Can't wait to play with you!</p>
+          </div>
+        </div>
+      `
+    };
+
+    // Using a simple email service (you can replace this with your preferred email service)
+    const response = await fetch('/api/send-email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(emailData)
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to send email');
     }
   };
 
