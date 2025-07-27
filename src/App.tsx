@@ -13,6 +13,7 @@ export default function PlaydateSelector() {
   const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', date: '', reason: '' });
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedFilter, setSelectedFilter] = useState<string>('all');
 
   useEffect(() => {
     fetchActivities();
@@ -79,7 +80,7 @@ async function fetchActivities() {
         // date_range: formattedDate,
         reason: formData.reason
       });
-      await supabase.from('activities').update({ booked: true }).eq('id', selectedActivity.id);
+      await supabase.from('activities').update({ is_booked: true }).eq('id', selectedActivity.id);
       setSelectedActivity(null);
       setFormData({ name: '', email: '', phone: '', date: '', reason: '' });
     }
@@ -87,18 +88,55 @@ async function fetchActivities() {
 
   const cardColors = ['#f1ecdd', '#cbd5d8'];
 
+  // Extract unique tags from all activities
+  const allTags = Array.from(
+    new Set(
+      activities.flatMap(activity => activity.tags || [])
+    )
+  );
+
+  // Filter activities based on selected filter
+  const filteredActivities = selectedFilter === 'all' 
+    ? activities 
+    : activities.filter(activity => 
+        activity.tags && activity.tags.includes(selectedFilter)
+      );
+
   return (
     <div className="min-h-screen bg-[#594f43] font-sans text-[#3d342e]">
       <div className="px-6 py-12 max-w-6xl mx-auto">
-        {/* <h1 className="text-center text-3xl font-extrabold mb-2 tracking-wider text-[#f9f6ef]">
-          SELECT A PLAYDATE
-        </h1>
-        <p className="text-center text-[#d8d1c5] mb-8 text-sm">
-          Explore playdates below and schedule the one you'd most like to do together!
-        </p> */}
+        {/* Filter Buttons */}
+        <div className="mb-8">
+          {/* <h2 className="text-2xl font-bold text-white mb-4 text-center">Filter by Category</h2> */}
+          <div className="flex flex-wrap justify-center gap-3">
+            <button
+              onClick={() => setSelectedFilter('all')}
+              className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+                selectedFilter === 'all'
+                  ? 'bg-white text-[#594f43]'
+                  : 'bg-[#3d342e] text-white hover:bg-[#4a4038]'
+              }`}
+            >
+              All Activities
+            </button>
+            {allTags.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => setSelectedFilter(tag)}
+                className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+                  selectedFilter === tag
+                    ? 'bg-white text-[#594f43]'
+                    : 'bg-[#3d342e] text-white hover:bg-[#4a4038]'
+                }`}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {activities.map((activity, idx) => (
+          {filteredActivities.map((activity, idx) => (
             <div
               key={activity.id}
               className="rounded-[20px] text-center p-6 shadow-xl"
@@ -107,9 +145,9 @@ async function fetchActivities() {
               <h2 className="font-bold text-lg uppercase mb-2">{activity.title}</h2>
               <p className="text-sm mb-4">{activity.description}</p>
 
-              {activity.booked ? (
-                <div className="bg-gray-300 text-gray-700 py-2 px-4 rounded text-center">
-                  Playdate set with {activity.bookerName || 'someone'}
+              {activity.is_booked ? (
+                <div className="text-gray-700 py-2 px-4 rounded text-center">
+                  Playdate set with {activity.booked_by || 'someone'}
                 </div>
               ) : (
                 <button
