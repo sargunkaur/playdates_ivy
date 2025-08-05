@@ -3,42 +3,20 @@ import { createClient } from '@supabase/supabase-js';
 import { Dialog } from './components/ui/dialog';
 import BookingPage from './BookingPage';
 import ConfirmationScreen from './ConfirmationScreen';
-import FilterPage from './FilterPage';
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL!,
   import.meta.env.VITE_SUPABASE_ANON_KEY!
 );
 
-export default function App() {
-  const [currentPath, setCurrentPath] = useState(window.location.pathname);
-
-  useEffect(() => {
-    const handlePopState = () => {
-      setCurrentPath(window.location.pathname);
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  // Extract filter tag from URL
-  const filterTag = currentPath.slice(1); // Remove leading slash
-
-  // Check if we're on a filter page
-  if (filterTag && filterTag !== '') {
-    return <FilterPage filterTag={filterTag} />;
-  }
-
-  // Main page
-  return <PlaydateSelector />;
+interface FilterPageProps {
+  filterTag: string;
 }
 
-function PlaydateSelector() {
+export default function FilterPage({ filterTag }: FilterPageProps) {
   const [activities, setActivities] = useState<any[]>([]);
   const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', date: '', reason: '' });
-  const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [isMobile, setIsMobile] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmationData, setConfirmationData] = useState<{ activity: any; userName: string } | null>(null);
@@ -46,6 +24,11 @@ function PlaydateSelector() {
 
   // Shared form field styles
   const formFieldClasses = "border-2 border-[#cbd5d8] p-2 sm:p-2.5 md:p-3 rounded-[12px] bg-transparent text-[#3d342e] placeholder-[#594f43] focus:outline-none focus:border-[#594f43] transition-colors text-xs sm:text-sm md:text-base w-full";
+
+  const cardColors = ['#f1ecdd', '#cbd5d8'];
+
+  // Decode the filter tag from URL (handles spaces and special characters)
+  const decodedFilterTag = decodeURIComponent(filterTag);
 
   // Phone number validation function
   const validatePhoneNumber = (phone: string): boolean => {
@@ -231,21 +214,22 @@ function PlaydateSelector() {
     }
   };
 
-  const cardColors = ['#f1ecdd', '#cbd5d8'];
-
-  // Extract unique tags from all activities
-  const allTags = Array.from(
-    new Set(
-      activities.flatMap(activity => activity.tags || [])
+  // Filter activities based on the filter tag
+  const filteredActivities = activities.filter(activity => 
+    activity.tags && activity.tags.some((tag: string) => 
+      tag.toLowerCase() === decodedFilterTag.toLowerCase()
     )
   );
 
-  // Filter activities based on selected filter
-  const filteredActivities = selectedFilter === 'all' 
-    ? activities 
-    : activities.filter(activity => 
-        activity.tags && activity.tags.includes(selectedFilter)
-      );
+  // Debug logging
+  console.log('FilterPage Debug:', {
+    originalFilterTag: filterTag,
+    decodedFilterTag,
+    totalActivities: activities.length,
+    filteredActivities: filteredActivities.length,
+    allTags: activities.flatMap(activity => activity.tags || []),
+    uniqueTags: Array.from(new Set(activities.flatMap(activity => activity.tags || [])))
+  });
 
   // Show booking page on mobile, modal on desktop
   if (isMobile && selectedActivity) {
@@ -277,60 +261,47 @@ function PlaydateSelector() {
   return (
     <div className="min-h-screen font-sans text-[#3d342e]">
       <div className="px-6 py-12 max-w-6xl mx-auto">
-        {/* Filter Buttons */}
-        <div className="mb-8">
-          <div className="bg-[#f1ecdd] rounded-lg p-1 w-full">
-            <div className="flex flex-wrap gap-1">
-              <button
-                onClick={() => setSelectedFilter('all')}
-                className={`px-6 py-3 rounded-md font-bold text-sm transition-all flex-shrink-0 ${
-                  selectedFilter === 'all'
-                    ? 'bg-[#594f43] text-white shadow-sm'
-                    : 'text-[#594f43] hover:bg-[#e8e0d0]'
-                }`}
-              >
-                ALL
-              </button>
-              {allTags.map((tag, index) => (
-                <button
-                  key={tag}
-                  onClick={() => {
-                    // Navigate to filter page with proper URL encoding
-                    window.location.href = `/${encodeURIComponent(tag)}`;
-                  }}
-                  className="px-6 py-3 rounded-md font-bold text-sm transition-all flex-shrink-0 text-[#594f43] hover:bg-[#e8e0d0]"
-                >
-                  {tag.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredActivities.map((activity, idx) => (
-            <div
-              key={activity.id}
-              className="rounded-[20px] text-center p-6 shadow-xl"
-              style={{ backgroundColor: cardColors[idx % cardColors.length] }}
-            >
-              <h2 className="font-bold text-lg uppercase mb-2">{activity.title}</h2>
-              <p className="text-sm mb-4">{activity.description}</p>
+          {filteredActivities.length > 0 ? (
+            filteredActivities.map((activity, idx) => (
+              <div
+                key={activity.id}
+                className="rounded-[20px] text-center p-6 shadow-xl"
+                style={{ backgroundColor: cardColors[idx % cardColors.length] }}
+              >
+                <h2 className="font-bold text-lg uppercase mb-2">{activity.title}</h2>
+                <p className="text-sm mb-4">{activity.description}</p>
 
-              {activity.is_booked ? (
-                <div className="text-gray-700 py-2 px-4 rounded text-center">
-                  Playdate set with {activity.booked_by || 'someone'}
-                </div>
-              ) : (
-                <button
-                  onClick={() => setSelectedActivity(activity)}
-                  className="bg-[#594f43] text-white px-6 py-2 rounded-[12px] font-semibold text-sm"
-                >
-                  SCHEDULE THIS!
-                </button>
-              )}            
+                {activity.is_booked ? (
+                  <div className="text-gray-700 py-2 px-4 rounded text-center">
+                    Playdate set with {activity.booked_by || 'someone'}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setSelectedActivity(activity)}
+                    className="bg-[#594f43] text-white px-6 py-2 rounded-[12px] font-semibold text-sm"
+                  >
+                    SCHEDULE THIS!
+                  </button>
+                )}            
+              </div>
+            ))
+          ) : (
+            <div className="col-span-full text-center py-12">
+              <h3 className="text-xl font-bold text-[#3d342e] mb-4">
+                No activities found for "{decodedFilterTag}"
+              </h3>
+              <p className="text-[#3d342e]/80 mb-6">
+                Available tags: {Array.from(new Set(activities.flatMap(activity => activity.tags || []))).join(', ')}
+              </p>
+              <button
+                onClick={() => window.history.back()}
+                className="bg-[#594f43] text-white px-6 py-2 rounded-[12px] font-semibold text-sm"
+              >
+                ← Back to All Activities
+              </button>
             </div>
-          ))}
+          )}
         </div>
       </div>
 
@@ -486,4 +457,4 @@ function PlaydateSelector() {
       )}
     </div>
   );
-}
+} 
